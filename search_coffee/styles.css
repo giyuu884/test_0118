@@ -224,9 +224,16 @@ h1 {
   font-size: 12px;
 }
 
+/* CTAボタンコンテナ */
+.cta-buttons {
+  margin-top: 24px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 /* 検索CTAボタン */
 .search-cta {
-  margin-top: 24px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -489,7 +496,6 @@ h1 {
 }
 
 .chat-cta {
-  margin-top: 16px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
