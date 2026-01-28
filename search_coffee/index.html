@@ -16,18 +16,96 @@
         <p class="eyebrow">Coffee Beans Guide</p>
         <h1>コーヒー豆ビギナーズガイド</h1>
         <p class="lead">
-          初心者でも迷わないように、代表的な豆を「酸味・味の濃さ・焙煎度」を10段階でまとめました。
+          代表的な豆を「酸味・味の濃さ・焙煎度」を10段階でまとめました。
         </p>
         <div class="note">
           <span>評価の目安:</span>
           <span>1 = 軽い / 浅い</span>
           <span>10 = しっかり / 深い</span>
         </div>
+        <button class="search-cta" id="openSearchModal">
+          コーヒー豆を検索する
+        </button>
       </div>
     </header>
 
+    <!-- 検索モーダル -->
+    <div class="modal-overlay" id="searchModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>コーヒー豆を検索</h2>
+          <button class="modal-close" id="closeModal" aria-label="閉じる">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="search-criteria">
+            <div class="criteria-group">
+              <label>酸味</label>
+              <div class="criteria-buttons" data-criteria="acidity">
+                <button type="button" data-value="1">1</button>
+                <button type="button" data-value="2">2</button>
+                <button type="button" data-value="3">3</button>
+                <button type="button" data-value="4">4</button>
+                <button type="button" data-value="5">5</button>
+                <button type="button" data-value="6">6</button>
+                <button type="button" data-value="7">7</button>
+                <button type="button" data-value="8">8</button>
+                <button type="button" data-value="9">9</button>
+                <button type="button" data-value="10">10</button>
+              </div>
+            </div>
+            <div class="criteria-group">
+              <label>味の濃さ</label>
+              <div class="criteria-buttons" data-criteria="body">
+                <button type="button" data-value="1">1</button>
+                <button type="button" data-value="2">2</button>
+                <button type="button" data-value="3">3</button>
+                <button type="button" data-value="4">4</button>
+                <button type="button" data-value="5">5</button>
+                <button type="button" data-value="6">6</button>
+                <button type="button" data-value="7">7</button>
+                <button type="button" data-value="8">8</button>
+                <button type="button" data-value="9">9</button>
+                <button type="button" data-value="10">10</button>
+              </div>
+            </div>
+            <div class="criteria-group">
+              <label>焙煎度</label>
+              <div class="criteria-buttons" data-criteria="roast">
+                <button type="button" data-value="1">1</button>
+                <button type="button" data-value="2">2</button>
+                <button type="button" data-value="3">3</button>
+                <button type="button" data-value="4">4</button>
+                <button type="button" data-value="5">5</button>
+                <button type="button" data-value="6">6</button>
+                <button type="button" data-value="7">7</button>
+                <button type="button" data-value="8">8</button>
+                <button type="button" data-value="9">9</button>
+                <button type="button" data-value="10">10</button>
+              </div>
+            </div>
+          </div>
+          <p class="search-hint">※ 1項目以上選択してください</p>
+          <p class="search-error" id="searchError"></p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="backBtn">戻る</button>
+          <button class="btn-primary" id="searchBtn">検索する</button>
+        </div>
+      </div>
+    </div>
+
     <main class="container">
-      <section class="section">
+      <!-- 検索結果エリア（初期非表示） -->
+      <section class="section search-results-section" id="searchResultsSection" style="display: none;">
+        <div class="section-header">
+          <h2 id="searchResultsTitle">検索結果</h2>
+          <p id="searchResultsDesc"></p>
+          <button class="btn-reset" id="resetSearch">すべての豆を表示</button>
+        </div>
+        <div class="grid" id="searchResultsGrid"></div>
+      </section>
+
+      <section class="section" id="allBeansSection">
         <div class="section-header">
           <h2>代表的なコーヒー豆</h2>
           <p>初心者でも選びやすい20種類を、特徴・精製・等級も添えて紹介。</p>
@@ -670,5 +748,276 @@
         </p>
       </div>
     </footer>
+
+    <script>
+      (function () {
+        // 要素の取得
+        const openModalBtn = document.getElementById('openSearchModal');
+        const closeModalBtn = document.getElementById('closeModal');
+        const backBtn = document.getElementById('backBtn');
+        const searchBtn = document.getElementById('searchBtn');
+        const modal = document.getElementById('searchModal');
+        const searchError = document.getElementById('searchError');
+        const resetSearchBtn = document.getElementById('resetSearch');
+        const searchResultsSection = document.getElementById('searchResultsSection');
+        const searchResultsGrid = document.getElementById('searchResultsGrid');
+        const searchResultsTitle = document.getElementById('searchResultsTitle');
+        const searchResultsDesc = document.getElementById('searchResultsDesc');
+        const allBeansSection = document.getElementById('allBeansSection');
+
+        // 選択状態
+        const selectedCriteria = {
+          acidity: null,
+          body: null,
+          roast: null
+        };
+
+        // 既存カードからデータを抽出
+        function extractBeanData() {
+          const cards = allBeansSection.querySelectorAll('.card');
+          const beans = [];
+
+          cards.forEach((card, index) => {
+            const name = card.querySelector('h3').textContent;
+            const tag = card.querySelector('.tag').textContent;
+            const desc = card.querySelector('.desc').textContent;
+            const ratings = card.querySelectorAll('.rating');
+            const meta = card.querySelectorAll('.meta li');
+
+            const acidity = parseInt(ratings[0].querySelector('.score').textContent);
+            const body = parseInt(ratings[1].querySelector('.score').textContent);
+            const roast = parseInt(ratings[2].querySelector('.score').textContent);
+
+            const metaInfo = [];
+            meta.forEach(li => {
+              metaInfo.push({
+                label: li.querySelector('.meta-label').textContent,
+                value: li.textContent.replace(li.querySelector('.meta-label').textContent, '')
+              });
+            });
+
+            beans.push({
+              index,
+              name,
+              tag,
+              desc,
+              acidity,
+              body,
+              roast,
+              meta: metaInfo,
+              element: card
+            });
+          });
+
+          return beans;
+        }
+
+        // カードHTMLを生成
+        function createCardHTML(bean) {
+          return `
+            <article class="card">
+              <div class="card-header">
+                <h3>${bean.name}</h3>
+                <span class="tag">${bean.tag}</span>
+              </div>
+              <p class="desc">${bean.desc}</p>
+              <div class="ratings">
+                <div class="rating">
+                  <span>酸味</span>
+                  <div class="bar" style="--value: ${bean.acidity}"></div>
+                  <span class="score">${bean.acidity}</span>
+                </div>
+                <div class="rating">
+                  <span>味の濃さ</span>
+                  <div class="bar" style="--value: ${bean.body}"></div>
+                  <span class="score">${bean.body}</span>
+                </div>
+                <div class="rating">
+                  <span>焙煎度</span>
+                  <div class="bar" style="--value: ${bean.roast}"></div>
+                  <span class="score">${bean.roast}</span>
+                </div>
+              </div>
+              <ul class="meta">
+                ${bean.meta.map(m => `<li><span class="meta-label">${m.label}</span>${m.value}</li>`).join('')}
+              </ul>
+            </article>
+          `;
+        }
+
+        // 距離計算
+        function calculateDistance(bean, criteria) {
+          let distance = 0;
+          if (criteria.acidity !== null) {
+            distance += Math.abs(bean.acidity - criteria.acidity);
+          }
+          if (criteria.body !== null) {
+            distance += Math.abs(bean.body - criteria.body);
+          }
+          if (criteria.roast !== null) {
+            distance += Math.abs(bean.roast - criteria.roast);
+          }
+          return distance;
+        }
+
+        // 完全一致チェック
+        function isExactMatch(bean, criteria) {
+          if (criteria.acidity !== null && bean.acidity !== criteria.acidity) return false;
+          if (criteria.body !== null && bean.body !== criteria.body) return false;
+          if (criteria.roast !== null && bean.roast !== criteria.roast) return false;
+          return true;
+        }
+
+        // 検索実行
+        function performSearch() {
+          const hasSelection = selectedCriteria.acidity !== null ||
+                               selectedCriteria.body !== null ||
+                               selectedCriteria.roast !== null;
+
+          if (!hasSelection) {
+            searchError.textContent = '1項目以上選択してください';
+            return;
+          }
+
+          searchError.textContent = '';
+          const beans = extractBeanData();
+
+          // 完全一致を検索
+          const exactMatches = beans.filter(bean => isExactMatch(bean, selectedCriteria));
+
+          let results;
+          let resultType;
+
+          if (exactMatches.length > 0) {
+            // 完全一致がある場合：元の並び順で全件表示
+            results = exactMatches.sort((a, b) => a.index - b.index);
+            resultType = 'exact';
+          } else {
+            // 完全一致がない場合：距離順で最低3件
+            const beansWithDistance = beans.map(bean => ({
+              ...bean,
+              distance: calculateDistance(bean, selectedCriteria)
+            }));
+
+            // 距離順にソート（同距離は元の並び順）
+            beansWithDistance.sort((a, b) => {
+              if (a.distance !== b.distance) return a.distance - b.distance;
+              return a.index - b.index;
+            });
+
+            results = beansWithDistance.slice(0, Math.max(3, beansWithDistance.length));
+            resultType = 'similar';
+          }
+
+          // 検索条件の文字列を作成
+          const criteriaText = [];
+          if (selectedCriteria.acidity !== null) criteriaText.push(`酸味: ${selectedCriteria.acidity}`);
+          if (selectedCriteria.body !== null) criteriaText.push(`味の濃さ: ${selectedCriteria.body}`);
+          if (selectedCriteria.roast !== null) criteriaText.push(`焙煎度: ${selectedCriteria.roast}`);
+
+          // 結果表示
+          if (resultType === 'exact') {
+            searchResultsTitle.textContent = `検索結果: ${results.length}件`;
+            searchResultsDesc.textContent = `${criteriaText.join('、')} に一致するコーヒー豆`;
+          } else {
+            searchResultsTitle.textContent = `おすすめのコーヒー豆: ${results.length}件`;
+            searchResultsDesc.textContent = `${criteriaText.join('、')} に近いコーヒー豆`;
+          }
+
+          searchResultsGrid.innerHTML = results.map(bean => createCardHTML(bean)).join('');
+
+          // モーダルを閉じて検索結果を表示
+          closeModal();
+          searchResultsSection.style.display = 'block';
+          allBeansSection.style.display = 'none';
+
+          // 検索結果にスクロール
+          searchResultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // モーダルを開く
+        function openModal() {
+          modal.classList.add('is-active');
+          document.body.style.overflow = 'hidden';
+        }
+
+        // モーダルを閉じる
+        function closeModal() {
+          modal.classList.remove('is-active');
+          document.body.style.overflow = '';
+        }
+
+        // 選択状態をリセット
+        function resetSelection() {
+          selectedCriteria.acidity = null;
+          selectedCriteria.body = null;
+          selectedCriteria.roast = null;
+          document.querySelectorAll('.criteria-buttons button').forEach(btn => {
+            btn.classList.remove('is-selected');
+          });
+          searchError.textContent = '';
+        }
+
+        // 検索結果をリセット
+        function resetSearch() {
+          searchResultsSection.style.display = 'none';
+          allBeansSection.style.display = 'block';
+          resetSelection();
+        }
+
+        // イベントリスナー
+        openModalBtn.addEventListener('click', () => {
+          resetSelection();
+          openModal();
+        });
+
+        closeModalBtn.addEventListener('click', closeModal);
+        backBtn.addEventListener('click', closeModal);
+
+        // オーバーレイクリックで閉じる
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            closeModal();
+          }
+        });
+
+        // ESCキーで閉じる
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && modal.classList.contains('is-active')) {
+            closeModal();
+          }
+        });
+
+        // 選択ボタンのトグル
+        document.querySelectorAll('.criteria-buttons').forEach(group => {
+          const criteria = group.dataset.criteria;
+
+          group.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'BUTTON') return;
+
+            const value = parseInt(e.target.dataset.value);
+
+            // 同じボタンをクリックしたら解除
+            if (selectedCriteria[criteria] === value) {
+              selectedCriteria[criteria] = null;
+              e.target.classList.remove('is-selected');
+            } else {
+              // 他のボタンの選択を解除
+              group.querySelectorAll('button').forEach(btn => {
+                btn.classList.remove('is-selected');
+              });
+              // 新しく選択
+              selectedCriteria[criteria] = value;
+              e.target.classList.add('is-selected');
+            }
+
+            searchError.textContent = '';
+          });
+        });
+
+        searchBtn.addEventListener('click', performSearch);
+        resetSearchBtn.addEventListener('click', resetSearch);
+      })();
+    </script>
   </body>
 </html>
