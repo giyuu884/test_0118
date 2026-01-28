@@ -26,8 +26,43 @@
         <button class="search-cta" id="openSearchModal">
           コーヒー豆を検索する
         </button>
+
+        <!-- コーヒー豆くんセクション -->
+        <div class="coffee-bean-kun">
+          <div class="trivia-box">
+            <span class="trivia-icon">☕</span>
+            <p class="trivia-text" id="triviaText">コーヒーの起源はエチオピアなのだ！ヤギ飼いのカルディが、コーヒーの実を食べて興奮するヤギを見つけたのが始まりと言われているのだ。</p>
+          </div>
+          <button class="chat-cta" id="openChatModal">
+            コーヒー豆くんと会話する
+          </button>
+        </div>
       </div>
     </header>
+
+    <!-- コーヒー豆くんチャットオーバーレイ -->
+    <div class="chat-overlay" id="chatOverlay"></div>
+
+    <!-- コーヒー豆くんチャットモーダル -->
+    <div class="chat-modal" id="chatModal">
+      <div class="chat-modal-content">
+        <div class="chat-modal-header">
+          <h2>コーヒー豆くんとチャット</h2>
+          <button class="chat-modal-close" id="closeChatModal" aria-label="閉じる">&times;</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-message assistant">
+            <div class="chat-bubble">
+              やあ！コーヒー豆くんなのだ。コーヒーのことなら何でも聞いてほしいのだ！気分に合わせたおすすめも教えるのだ。
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <input type="text" class="chat-input" id="chatInput" placeholder="メッセージを入力..." />
+          <button class="chat-send" id="chatSend">送信</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 検索モーダル -->
     <div class="modal-overlay" id="searchModal">
@@ -1005,6 +1040,159 @@
 
         searchBtn.addEventListener('click', performSearch);
         resetSearchBtn.addEventListener('click', resetSearch);
+
+        // ===== コーヒー豆くんチャットモーダル =====
+        const openChatBtn = document.getElementById('openChatModal');
+        const closeChatBtn = document.getElementById('closeChatModal');
+        const chatModal = document.getElementById('chatModal');
+        const chatOverlay = document.getElementById('chatOverlay');
+        const chatInput = document.getElementById('chatInput');
+        const chatSend = document.getElementById('chatSend');
+        const chatMessages = document.getElementById('chatMessages');
+        const triviaText = document.getElementById('triviaText');
+
+        // 豆知識配列
+        const triviaList = [
+          'コーヒーの起源はエチオピアなのだ！ヤギ飼いのカルディが、コーヒーの実を食べて興奮するヤギを見つけたのが始まりと言われているのだ。',
+          'コーヒー豆は実は「豆」じゃなくて、コーヒーチェリーという果実の種なのだ！',
+          '世界で最も高価なコーヒーはジャコウネコの糞から採れるコピ・ルアクなのだ。1杯で数千円することもあるのだ！',
+          'フィンランドは世界で最もコーヒーを飲む国なのだ。1人あたり年間約12kgも消費するのだ！',
+          'エスプレッソはイタリア語で「急行」という意味なのだ。注文を受けてすぐに抽出されることから名付けられたのだ。',
+          'コーヒーは石油に次いで世界で2番目に取引量の多い商品なのだ！',
+          'カフェインの効果が現れるまでには約20分かかるのだ。目覚めのコーヒーは起きてすぐより、少し待ってからの方がいいかもしれないのだ。',
+          'アイスコーヒーは実は日本発祥なのだ！明治時代から飲まれていたらしいのだ。',
+          'ブラジルは世界のコーヒー生産量の約3分の1を占めているのだ。まさにコーヒー大国なのだ！',
+          'コーヒーの木は1本で約40年間も実をつけ続けるのだ。長生きな木なのだ！',
+          'デカフェコーヒーでも完全にカフェインがゼロではなく、少量は含まれているのだ。',
+          'コーヒーは約60種類以上の国で栽培されているのだ。赤道付近の「コーヒーベルト」と呼ばれる地域が主な産地なのだ。',
+          '焙煎度が深いほどカフェインは少なくなるのだ。浅煎りの方がカフェインが多いのは意外なのだ！',
+          'バッハもコーヒーが大好きで、「コーヒー・カンタータ」という曲まで作ったのだ！',
+          'コーヒーの香り成分は800種類以上もあるのだ。ワインよりも複雑な香りを持っているのだ！'
+        ];
+
+        // ランダムな豆知識を表示
+        function showRandomTrivia() {
+          const randomIndex = Math.floor(Math.random() * triviaList.length);
+          triviaText.textContent = triviaList[randomIndex];
+        }
+
+        // ページ読み込み時に豆知識を表示
+        showRandomTrivia();
+
+        // チャットモーダルを開く
+        function openChatModal() {
+          chatModal.classList.add('is-open');
+          chatOverlay.classList.add('is-active');
+          document.body.style.overflow = 'hidden';
+          chatInput.focus();
+        }
+
+        // チャットモーダルを閉じる
+        function closeChatModal() {
+          chatModal.classList.remove('is-open');
+          chatOverlay.classList.remove('is-active');
+          document.body.style.overflow = '';
+        }
+
+        openChatBtn.addEventListener('click', openChatModal);
+        closeChatBtn.addEventListener('click', closeChatModal);
+        chatOverlay.addEventListener('click', closeChatModal);
+
+        // ESCキーで閉じる
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && chatModal.classList.contains('is-open')) {
+            closeChatModal();
+          }
+        });
+
+        // ===== フェーズ2: 疑似AI会話機能 =====
+
+        // 日本語テンプレート返答
+        const jaResponses = [
+          'なるほど！コーヒーに興味があるんだね。ブラジルやコロンビアは初心者にもおすすめなのだ！',
+          '今日の気分によっておすすめが変わるのだ。すっきりしたいならエチオピア、しっかり飲みたいならインドネシアがいいのだ！',
+          'いい質問なのだ！酸味が苦手なら、インドネシアやブラジルを試してみるといいのだ。',
+          'コーヒーのことならお任せなのだ！焙煎度によって味わいが大きく変わるのだ。浅煎りは酸味、深煎りはコクが特徴なのだ。',
+          'カフェ選びで迷ったら、まずはシングルオリジンを試すといいのだ。産地ごとの個性がわかるようになるのだ！',
+          'ドリップコーヒーを淹れるなら、お湯の温度は90〜95度がベストなのだ。熱すぎると苦味が出やすいのだ。',
+          'コーヒーと相性のいい食べ物を探しているのかな？チョコレートやナッツ系のお菓子がよく合うのだ！',
+          '朝に飲むコーヒーと午後に飲むコーヒーは、同じ豆でも味わいが違って感じることがあるのだ。不思議なのだ！'
+        ];
+
+        // 英語テンプレート返答
+        const enResponses = [
+          "Great question! Brazilian and Colombian beans are perfect for beginners. They have a balanced flavor!",
+          "If you want something refreshing, try Ethiopian coffee. For a bold taste, Indonesian beans are the way to go!",
+          "Coffee is fascinating! The roast level greatly affects the taste. Light roast is more acidic, while dark roast has more body.",
+          "For brewing the perfect cup, keep your water temperature between 90-95°C. Too hot and you'll get bitter notes!",
+          "Looking for food pairings? Coffee goes wonderfully with chocolate and nuts!",
+          "Single origin coffees are great for exploring different flavor profiles from around the world!",
+          "Did you know that the best time to drink coffee is actually 9:30-11:30 AM? That's when cortisol levels are lower!",
+          "If you're sensitive to acidity, try Indonesian or Brazilian beans. They tend to be smoother!"
+        ];
+
+        // 英語判定（簡易）
+        function isEnglish(text) {
+          // ASCII文字（英語アルファベット）の割合で判定
+          const asciiChars = text.match(/[a-zA-Z]/g);
+          const totalChars = text.replace(/\s/g, '').length;
+          if (totalChars === 0) return false;
+          return asciiChars && (asciiChars.length / totalChars) > 0.5;
+        }
+
+        // チャットメッセージを追加
+        function addChatMessage(text, isUser) {
+          const messageDiv = document.createElement('div');
+          messageDiv.className = `chat-message ${isUser ? 'user' : 'assistant'}`;
+          
+          const bubbleDiv = document.createElement('div');
+          bubbleDiv.className = 'chat-bubble';
+          bubbleDiv.textContent = text;
+          
+          messageDiv.appendChild(bubbleDiv);
+          chatMessages.appendChild(messageDiv);
+          
+          // スクロールを最下部に
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 疑似AI返答を取得
+        function getAIResponse(userMessage) {
+          if (isEnglish(userMessage)) {
+            const randomIndex = Math.floor(Math.random() * enResponses.length);
+            return enResponses[randomIndex];
+          } else {
+            const randomIndex = Math.floor(Math.random() * jaResponses.length);
+            return jaResponses[randomIndex];
+          }
+        }
+
+        // メッセージ送信処理
+        function sendMessage() {
+          const message = chatInput.value.trim();
+          if (!message) return;
+
+          // ユーザーメッセージを追加
+          addChatMessage(message, true);
+          chatInput.value = '';
+
+          // 少し遅延して返答（よりリアルな感じに）
+          setTimeout(() => {
+            const response = getAIResponse(message);
+            addChatMessage(response, false);
+          }, 500);
+        }
+
+        // 送信ボタンクリック
+        chatSend.addEventListener('click', sendMessage);
+
+        // Enterキーで送信
+        chatInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+          }
+        });
       })();
     </script>
   </body>
