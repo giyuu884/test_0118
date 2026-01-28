@@ -347,7 +347,7 @@ h1 {
 .criteria-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .criteria-buttons button {
@@ -372,12 +372,6 @@ h1 {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
-}
-
-.search-hint {
-  margin-top: 16px;
-  font-size: 13px;
-  color: var(--muted);
 }
 
 .search-error {
@@ -464,6 +458,10 @@ h1 {
 
   .note {
     border-radius: 18px;
+  }
+
+  .criteria-buttons {
+    gap: 4px;
   }
 
   .criteria-buttons button {
