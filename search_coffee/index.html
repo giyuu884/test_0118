@@ -26,6 +26,15 @@
         <button class="search-cta" id="openSearchModal">
           コーヒー豆を検索する
         </button>
+        <div class="coffee-bean-kun-area">
+          <p class="trivia-display">
+            <span class="trivia-label">☕ 今日の豆知識:</span>
+            <span class="trivia-text" id="triviaText">読み込み中...</span>
+          </p>
+          <button class="chat-button" id="openChatModal">
+            コーヒー豆くんと会話する
+          </button>
+        </div>
       </div>
     </header>
 
@@ -748,6 +757,26 @@
       </div>
     </footer>
 
+    <!-- APIキー設定 -->
+    <script src="config.js"></script>
+
+    <!-- チャットモーダル -->
+    <div class="chat-modal-overlay" id="chatModal">
+      <div class="chat-modal">
+        <div class="chat-modal-header">
+          <h2>コーヒー豆くんとチャット</h2>
+          <button class="chat-modal-close" id="closeChatModal" aria-label="閉じる">&times;</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+          <!-- メッセージがここに追加される -->
+        </div>
+        <div class="chat-input-area">
+          <input type="text" class="chat-input" id="chatInput" placeholder="メッセージを入力..." />
+          <button class="chat-send-btn" id="chatSendBtn">送信</button>
+        </div>
+      </div>
+    </div>
+
     <script>
       (function () {
         // 要素の取得
@@ -1004,6 +1033,210 @@
 
         searchBtn.addEventListener('click', performSearch);
         resetSearchBtn.addEventListener('click', resetSearch);
+      })();
+
+      // コーヒー豆くんチャット機能
+      (function () {
+        // 要素の取得
+        const openChatBtn = document.getElementById('openChatModal');
+        const closeChatBtn = document.getElementById('closeChatModal');
+        const chatModal = document.getElementById('chatModal');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const chatSendBtn = document.getElementById('chatSendBtn');
+        const triviaText = document.getElementById('triviaText');
+
+        // 状態管理
+        let isChatOpen = false;
+        let chatHistory = [];
+        let isSending = false;
+
+        // APIエンドポイント
+        const API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+
+        // システムプロンプト
+        const SYSTEM_INSTRUCTION = {
+          parts: [{
+            text: "あなたは「コーヒー豆くん」です。一人称は「コーヒー豆くん」、語尾は「〜なのだ」で話してください。コーヒーに関する質問に答えたり、おすすめの豆を紹介してください。ユーザーが英語で話しかけたら英語で返答してください。"
+          }]
+        };
+
+        // デフォルト豆知識
+        const DEFAULT_TRIVIA = "コーヒーの木は赤道付近の「コーヒーベルト」と呼ばれる地域で栽培されているのだ！";
+
+        // 豆知識を取得
+        async function fetchTrivia() {
+          if (typeof GEMINI_API_KEY === 'undefined' || GEMINI_API_KEY === 'YOUR_API_KEY_HERE') {
+            triviaText.textContent = DEFAULT_TRIVIA;
+            return;
+          }
+
+          try {
+            const response = await fetch(`${API_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  role: 'user',
+                  parts: [{ text: 'コーヒーに関する豆知識を1つ、50文字以内で「〜なのだ」口調で教えて。' }]
+                }]
+              })
+            });
+
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const triviaResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (triviaResponse) {
+              triviaText.textContent = triviaResponse;
+            } else {
+              triviaText.textContent = DEFAULT_TRIVIA;
+            }
+          } catch (error) {
+            console.error('豆知識の取得に失敗:', error);
+            triviaText.textContent = DEFAULT_TRIVIA;
+          }
+        }
+
+        // 初期化: 豆知識を取得
+        fetchTrivia();
+
+        // メッセージを追加
+        function addMessage(role, text) {
+          const messageDiv = document.createElement('div');
+          messageDiv.className = `chat-message ${role}`;
+          messageDiv.textContent = text;
+          chatMessages.appendChild(messageDiv);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+          return messageDiv;
+        }
+
+        // ローディングメッセージを削除
+        function removeLoadingMessage() {
+          const loadingMsg = chatMessages.querySelector('.chat-message.loading');
+          if (loadingMsg) {
+            loadingMsg.remove();
+          }
+        }
+
+        // Gemini APIにリクエスト
+        async function callGeminiAPI() {
+          const response = await fetch(`${API_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: chatHistory,
+              systemInstruction: SYSTEM_INSTRUCTION
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+          return data.candidates?.[0]?.content?.parts?.[0]?.text || 'うまく返事できなかったのだ...';
+        }
+
+        // メッセージ送信
+        async function sendMessage() {
+          const message = chatInput.value.trim();
+          if (!message || isSending) return;
+
+          // 送信中状態に
+          isSending = true;
+          chatSendBtn.disabled = true;
+          chatInput.disabled = true;
+
+          // ユーザーメッセージを表示
+          addMessage('user', message);
+          chatInput.value = '';
+
+          // 履歴に追加
+          chatHistory.push({ role: 'user', parts: [{ text: message }] });
+
+          // ローディング表示
+          const loadingMsg = addMessage('assistant', '考え中なのだ...');
+          loadingMsg.classList.add('loading');
+
+          try {
+            // APIキーが未設定の場合はエラーメッセージ
+            if (typeof GEMINI_API_KEY === 'undefined' || GEMINI_API_KEY === 'YOUR_API_KEY_HERE') {
+              throw new Error('APIキーが設定されていません');
+            }
+
+            const response = await callGeminiAPI();
+
+            // ローディングを削除して応答を表示
+            removeLoadingMessage();
+            addMessage('assistant', response);
+
+            // 履歴に追加
+            chatHistory.push({ role: 'model', parts: [{ text: response }] });
+          } catch (error) {
+            console.error('API呼び出しエラー:', error);
+            removeLoadingMessage();
+
+            let errorMessage = 'うまく返事できなかったのだ...もう一度試してほしいのだ。';
+            if (error.message === 'APIキーが設定されていません') {
+              errorMessage = 'APIキーが設定されていないのだ。config.jsにAPIキーを設定してほしいのだ！';
+            }
+            addMessage('assistant', errorMessage);
+          } finally {
+            // 送信状態をリセット
+            isSending = false;
+            chatSendBtn.disabled = false;
+            chatInput.disabled = false;
+            chatInput.focus();
+          }
+        }
+
+        // チャットモーダルを開く
+        function openChatModal() {
+          chatModal.classList.add('is-active');
+          document.body.style.overflow = 'hidden';
+          isChatOpen = true;
+          chatInput.focus();
+        }
+
+        // チャットモーダルを閉じる
+        function closeChatModal() {
+          chatModal.classList.remove('is-active');
+          document.body.style.overflow = '';
+          isChatOpen = false;
+        }
+
+        // イベントリスナー
+        openChatBtn.addEventListener('click', openChatModal);
+        closeChatBtn.addEventListener('click', closeChatModal);
+
+        // オーバーレイクリックで閉じる
+        chatModal.addEventListener('click', (e) => {
+          if (e.target === chatModal) {
+            closeChatModal();
+          }
+        });
+
+        // ESCキーで閉じる
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && isChatOpen) {
+            closeChatModal();
+          }
+        });
+
+        // 送信ボタン
+        chatSendBtn.addEventListener('click', sendMessage);
+
+        // Enterキーで送信
+        chatInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+          }
+        });
       })();
     </script>
   </body>
