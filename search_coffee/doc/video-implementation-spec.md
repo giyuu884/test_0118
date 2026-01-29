@@ -80,11 +80,17 @@ test_0118/
 
 **演出**:
 - 背景: `#f6f5f2`（サイトの背景色）
-- 中央にコーヒーカップアイコン ☕ がフェードイン（0-30f）
+- 中央にコーヒーカップアイコンがフェードイン（0-30f）
 - タイトル「コーヒー豆ビギナーズガイド」がスプリングアニメーションで登場（30-60f）
 - サブタイトル「あなたの好みの豆が見つかる」がフェードイン（60-90f）
 
 **コンポーネント**: `TitleScene.tsx`
+
+```tsx
+// 実装例
+const opacity = interpolate(frame, [0, 30], [0, 1], { extrapolateRight: "clamp" });
+const scale = spring({ frame: frame - 30, fps, config: { damping: 12, mass: 0.5 } });
+```
 
 ---
 
@@ -101,6 +107,13 @@ test_0118/
 **素材**: `main-view.png`, `coffee-cards.png`
 
 **コンポーネント**: `MainPreviewScene.tsx`
+
+```tsx
+// 画像の読み込み例
+import { Img, staticFile } from "remotion";
+
+<Img src={staticFile("screenshots/main-view.png")} />
+```
 
 ---
 
@@ -128,10 +141,17 @@ test_0118/
 - ユーザーメッセージがタイプライター風に表示（300-330f）
   - 「初心者におすすめの豆は？」
 - コーヒー豆くんの返答が吹き出しで表示（330-390f）
-  - 「ブラジル産がおすすめです！バランスが良く、酸味も控えめで飲みやすいですよ ☕」
+  - 「ブラジル産がおすすめです！バランスが良く、酸味も控えめで飲みやすいですよ」
 - 「AIがあなたの疑問に答えます」テキスト（390-420f）
 
 **コンポーネント**: `ChatFeatureScene.tsx`, `ChatBubble.tsx`
+
+```tsx
+// タイプライター効果の実装例
+const text = "初心者におすすめの豆は？";
+const charsToShow = Math.floor(interpolate(frame, [0, 30], [0, text.length], { extrapolateRight: "clamp" }));
+const displayText = text.slice(0, charsToShow);
+```
 
 ---
 
@@ -147,6 +167,16 @@ test_0118/
 - 各項目にアイコン付き
 
 **コンポーネント**: `SummaryScene.tsx`
+
+```tsx
+// スタッガードアニメーションの例
+const items = ["20種類のコーヒー豆", "3つの評価軸で比較", "AIアシスタント搭載"];
+{items.map((item, i) => {
+  const delay = i * 20; // 20フレームずつ遅延
+  const x = interpolate(frame - delay, [0, 15], [100, 0], { extrapolateRight: "clamp" });
+  return <div style={{ transform: `translateX(${x}px)` }}>{item}</div>;
+})}
+```
 
 ---
 
@@ -180,11 +210,17 @@ export const colors = {
 };
 ```
 
-### フォント
+### フォント設定
 
 ```typescript
+// video/src/styles/theme.ts
+import { loadFont } from "@remotion/google-fonts/Inter";
+
+// フォントをロード（Root.tsx で呼び出す）
+export const { fontFamily } = loadFont();
+
 export const fonts = {
-  main: 'Inter, sans-serif',
+  main: fontFamily,  // Interフォント
   weight: {
     regular: 400,
     medium: 500,
@@ -203,6 +239,28 @@ export const fonts = {
 | スライド | 画面遷移、要素登場 | 15-20フレーム、easeOut |
 | タイプライター | チャットメッセージ | 1文字/2フレーム |
 
+### アニメーション実装パターン
+
+```typescript
+import { interpolate, spring, useCurrentFrame, useVideoConfig, Easing } from "remotion";
+
+// フェードイン
+const opacity = interpolate(frame, [0, 30], [0, 1], { extrapolateRight: "clamp" });
+
+// スプリングアニメーション
+const scale = spring({
+  frame,
+  fps,
+  config: { damping: 12, mass: 0.5 },
+});
+
+// イージング付きスライド
+const x = interpolate(frame, [0, 20], [100, 0], {
+  extrapolateRight: "clamp",
+  easing: Easing.out(Easing.cubic),
+});
+```
+
 ---
 
 ## 6. 実装手順
@@ -210,34 +268,129 @@ export const fonts = {
 ### Phase 1: 環境構築
 
 ```bash
-# 1. videoディレクトリを作成
-mkdir -p video
+# 1. videoディレクトリに移動（親ディレクトリで実行）
+cd test_0118
 
-# 2. Remotionプロジェクトを初期化
+# 2. Remotionプロジェクトを作成
+npm create video@latest
+
+# 対話形式で以下を入力:
+# - Project name: video
+# - Template: Blank
+
+# 3. プロジェクトディレクトリに移動
 cd video
-npx create-video@latest . --template blank
 
-# 3. 依存関係をインストール
-npm install
+# 4. 追加の依存関係をインストール
+npm install @remotion/google-fonts
 
-# 4. 開発サーバーを起動して動作確認
+# 5. 開発サーバーを起動して動作確認
 npm start
 ```
 
 ### Phase 2: 基本構造の作成
 
-1. `src/styles/theme.ts` を作成（カラー・フォント定義）
+1. `src/styles/theme.ts` を作成
+
+```typescript
+// video/src/styles/theme.ts
+import { loadFont } from "@remotion/google-fonts/Inter";
+
+export const { fontFamily } = loadFont();
+
+export const colors = {
+  bg: '#f6f5f2',
+  surface: '#ffffff',
+  text: '#1c1c1c',
+  muted: '#6a6a6a',
+  accent: '#b57c4d',
+  accentSoft: '#f2e7dc',
+  line: '#e6e2dd',
+};
+
+export const fonts = {
+  main: fontFamily,
+  weight: {
+    regular: 400,
+    medium: 500,
+    semibold: 600,
+    bold: 700,
+  },
+};
+```
+
 2. `src/Root.tsx` にCompositionを定義
+
+```typescript
+// video/src/Root.tsx
+import { Composition } from "remotion";
+import { CoffeeVideo } from "./CoffeeVideo";
+
+export const RemotionRoot: React.FC = () => {
+  return (
+    <Composition
+      id="CoffeeVideo"
+      component={CoffeeVideo}
+      durationInFrames={540}
+      fps={30}
+      width={1920}
+      height={1080}
+    />
+  );
+};
+```
+
 3. `src/CoffeeVideo.tsx` にメインコンポジションを作成
+
+```typescript
+// video/src/CoffeeVideo.tsx
+import { AbsoluteFill, Sequence } from "remotion";
+import { TitleScene } from "./scenes/TitleScene";
+import { MainPreviewScene } from "./scenes/MainPreviewScene";
+import { SearchFeatureScene } from "./scenes/SearchFeatureScene";
+import { ChatFeatureScene } from "./scenes/ChatFeatureScene";
+import { SummaryScene } from "./scenes/SummaryScene";
+import { EndingScene } from "./scenes/EndingScene";
+import { colors } from "./styles/theme";
+
+export const CoffeeVideo: React.FC = () => {
+  return (
+    <AbsoluteFill style={{ backgroundColor: colors.bg }}>
+      <Sequence from={0} durationInFrames={90}>
+        <TitleScene />
+      </Sequence>
+      <Sequence from={90} durationInFrames={90}>
+        <MainPreviewScene />
+      </Sequence>
+      <Sequence from={180} durationInFrames={90}>
+        <SearchFeatureScene />
+      </Sequence>
+      <Sequence from={270} durationInFrames={150}>
+        <ChatFeatureScene />
+      </Sequence>
+      <Sequence from={420} durationInFrames={60}>
+        <SummaryScene />
+      </Sequence>
+      <Sequence from={480} durationInFrames={60}>
+        <EndingScene />
+      </Sequence>
+    </AbsoluteFill>
+  );
+};
+```
 
 ### Phase 3: スクリーンショットの準備
 
-1. サイトをブラウザで開く
-2. 以下のスクリーンショットを撮影:
-   - メイン画面全体
-   - コーヒー豆カード部分
-   - 検索モーダル
-   - チャットモーダル
+1. サイトをブラウザで開く（`search_coffee/index.html`）
+2. 以下のスクリーンショットを撮影（推奨サイズ: 1920×1080 または 16:9比率）:
+
+| ファイル名 | 撮影対象 | 撮影のコツ |
+|-----------|---------|-----------|
+| `main-view.png` | サイト全体（ヘッダー + カード上部） | ブラウザ幅1920pxで撮影 |
+| `coffee-cards.png` | コーヒー豆カード部分 | 4-6枚のカードが見える状態 |
+| `search-modal.png` | 検索モーダル | モーダルを開いた状態で撮影 |
+| `chat-modal.png` | チャットモーダル | 会話例が表示された状態 |
+
 3. `video/public/screenshots/` に保存
 
 ### Phase 4: 各シーンの実装
@@ -252,13 +405,17 @@ npm start
 ### Phase 5: 統合とプレビュー
 
 1. `CoffeeVideo.tsx` で全シーンをSequenceで統合
-2. プレビューで確認・調整
+2. `npm start` でプレビュー確認
+3. タイミング・アニメーションを調整
 
 ### Phase 6: レンダリング
 
 ```bash
 # MP4として書き出し
 npx remotion render CoffeeVideo out/coffee-intro.mp4
+
+# 高品質設定でレンダリング
+npx remotion render CoffeeVideo out/coffee-intro.mp4 --codec h264 --crf 18
 ```
 
 ---
@@ -267,18 +424,34 @@ npx remotion render CoffeeVideo out/coffee-intro.mp4
 
 ### Remotion バージョン
 - remotion: ^4.0.0（最新安定版を使用）
+- @remotion/google-fonts: ^4.0.0
+
+### 必要なパッケージ
+
+```json
+{
+  "dependencies": {
+    "react": "^18.0.0",
+    "remotion": "^4.0.0",
+    "@remotion/cli": "^4.0.0",
+    "@remotion/google-fonts": "^4.0.0"
+  }
+}
+```
 
 ### 主要な使用API
 
-| API | 用途 |
-|-----|------|
-| `useCurrentFrame()` | 現在のフレーム取得 |
-| `useVideoConfig()` | 動画設定の取得 |
-| `interpolate()` | 値の補間（アニメーション） |
-| `spring()` | スプリングアニメーション |
-| `Sequence` | シーンの配置 |
-| `AbsoluteFill` | 全画面レイアウト |
-| `Img` | 画像の表示 |
+| API | 用途 | インポート元 |
+|-----|------|-------------|
+| `useCurrentFrame()` | 現在のフレーム取得 | `remotion` |
+| `useVideoConfig()` | 動画設定の取得（fps等） | `remotion` |
+| `interpolate()` | 値の補間（アニメーション） | `remotion` |
+| `spring()` | スプリングアニメーション | `remotion` |
+| `Sequence` | シーンの配置・タイミング制御 | `remotion` |
+| `AbsoluteFill` | 全画面レイアウト | `remotion` |
+| `Img` | 画像の表示 | `remotion` |
+| `staticFile()` | public内の静的ファイル参照 | `remotion` |
+| `loadFont()` | Google Fontsの読み込み | `@remotion/google-fonts/*` |
 
 ---
 
@@ -291,5 +464,6 @@ npx remotion render CoffeeVideo out/coffee-intro.mp4
 
 ### 注意事項
 - スクリーンショットは実際のサイトから取得すること
-- フォント（Inter）のライセンスを確認済み（OFL）
+- フォント（Inter）のライセンス: SIL Open Font License（商用利用可）
 - レンダリング時間の目安: 18秒動画で約1-2分
+- 画像は `staticFile()` を使って参照すること（直接importは非推奨）
