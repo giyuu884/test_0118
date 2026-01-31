@@ -1,13 +1,44 @@
-import { AbsoluteFill, Sequence } from "remotion";
+import { AbsoluteFill, Sequence, staticFile } from "remotion";
+import { Audio } from "@remotion/media";
 import { TitleScene } from "./scenes/TitleScene";
 import { MainPreviewScene } from "./scenes/MainPreviewScene";
 import { SearchFeatureScene } from "./scenes/SearchFeatureScene";
 import { ChatFeatureScene } from "./scenes/ChatFeatureScene";
 import { SummaryScene } from "./scenes/SummaryScene";
 import { EndingScene } from "./scenes/EndingScene";
+import { CaptionOverlay } from "./components/CaptionOverlay";
 import { colors, fonts } from "./styles/theme";
+import { CoffeeVideoProps } from "./types";
 
-export const CoffeeVideo: React.FC = () => {
+// シーンコンポーネントのマッピング
+const sceneComponents: Record<string, React.FC> = {
+  title: TitleScene,
+  mainPreview: MainPreviewScene,
+  searchFeature: SearchFeatureScene,
+  chatFeature: ChatFeatureScene,
+  summary: SummaryScene,
+  ending: EndingScene,
+};
+
+export const CoffeeVideo: React.FC<CoffeeVideoProps> = ({ scenes }) => {
+  // scenesが空の場合（defaultProps）はフォールバック表示
+  if (!scenes || scenes.length === 0) {
+    return (
+      <AbsoluteFill
+        style={{
+          backgroundColor: colors.bg,
+          fontFamily: fonts.main,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <div style={{ color: colors.muted, fontSize: 24 }}>
+          Loading scenes...
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
   return (
     <AbsoluteFill
       style={{
@@ -15,35 +46,32 @@ export const CoffeeVideo: React.FC = () => {
         fontFamily: fonts.main,
       }}
     >
-      {/* シーン1: タイトル (0:00-0:03) */}
-      <Sequence from={0} durationInFrames={90}>
-        <TitleScene />
-      </Sequence>
+      {scenes.map((scene) => {
+        const SceneComponent = sceneComponents[scene.id];
 
-      {/* シーン2: メイン画面紹介 (0:03-0:06) */}
-      <Sequence from={90} durationInFrames={90}>
-        <MainPreviewScene />
-      </Sequence>
+        if (!SceneComponent) {
+          console.warn(`Unknown scene id: ${scene.id}`);
+          return null;
+        }
 
-      {/* シーン3: 検索機能 (0:06-0:09) */}
-      <Sequence from={180} durationInFrames={90}>
-        <SearchFeatureScene />
-      </Sequence>
+        return (
+          <Sequence
+            key={scene.id}
+            from={scene.startFrame}
+            durationInFrames={scene.durationInFrames}
+            premountFor={30}
+          >
+            {/* 音声 */}
+            <Audio src={staticFile(scene.audioSrc)} />
 
-      {/* シーン4: AIチャット (0:09-0:14) */}
-      <Sequence from={270} durationInFrames={150}>
-        <ChatFeatureScene />
-      </Sequence>
+            {/* 映像 */}
+            <SceneComponent />
 
-      {/* シーン5: 特徴まとめ (0:14-0:16) */}
-      <Sequence from={420} durationInFrames={60}>
-        <SummaryScene />
-      </Sequence>
-
-      {/* シーン6: エンディング (0:16-0:18) */}
-      <Sequence from={480} durationInFrames={60}>
-        <EndingScene />
-      </Sequence>
+            {/* テロップ */}
+            <CaptionOverlay captions={scene.captions} />
+          </Sequence>
+        );
+      })}
     </AbsoluteFill>
   );
 };
