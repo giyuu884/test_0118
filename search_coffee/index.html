@@ -1111,21 +1111,100 @@
         const chatInput = document.getElementById('chatInput');
         const chatSendBtn = document.getElementById('chatSendBtn');
         const triviaText = document.getElementById('triviaText');
+        const searchResultsSection = document.getElementById('searchResultsSection');
+        const searchResultsGrid = document.getElementById('searchResultsGrid');
+        const searchResultsTitle = document.getElementById('searchResultsTitle');
+        const searchResultsDesc = document.getElementById('searchResultsDesc');
+        const allBeansSection = document.getElementById('allBeansSection');
 
         // 状態管理
         let isChatOpen = false;
         let chatHistory = [];
         let isSending = false;
+        let lastRecommendations = []; // おすすめTop3を保持
 
         // APIエンドポイント
-        const API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+        const API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
-        // システムプロンプト
-        const SYSTEM_INSTRUCTION = {
-          parts: [{
-            text: "あなたは「コーヒー豆くん」です。一人称は「コーヒー豆くん」、語尾は「〜なのだ」で話してください。コーヒーに関する質問に答えたり、おすすめの豆を紹介してください。ユーザーが英語で話しかけたら英語で返答してください。"
-          }]
-        };
+        // 既存カードから豆データを抽出
+        function extractBeanData() {
+          const cards = allBeansSection.querySelectorAll('.card');
+          const beans = [];
+          cards.forEach((card, index) => {
+            const name = card.querySelector('h3').textContent;
+            const tag = card.querySelector('.tag').textContent;
+            const desc = card.querySelector('.desc').textContent;
+            const ratings = card.querySelectorAll('.rating');
+            const meta = card.querySelectorAll('.meta li');
+            const acidity = parseInt(ratings[0].querySelector('.score').textContent);
+            const body = parseInt(ratings[1].querySelector('.score').textContent);
+            const roast = parseInt(ratings[2].querySelector('.score').textContent);
+            const metaInfo = [];
+            meta.forEach(li => {
+              metaInfo.push({
+                label: li.querySelector('.meta-label').textContent,
+                value: li.textContent.replace(li.querySelector('.meta-label').textContent, '')
+              });
+            });
+            beans.push({ index, name, tag, desc, acidity, body, roast, meta: metaInfo });
+          });
+          return beans;
+        }
+
+        // 既知の豆名リストを取得
+        function getKnownBeanNames() {
+          return extractBeanData().map(b => b.name);
+        }
+
+        // システムプロンプトを構築（短文+Top3制約）
+        function buildSystemInstruction(knownBeans, options = {}) {
+          const { allowLong = false } = options;
+          const beanList = knownBeans.join('、');
+          const lengthRule = allowLong
+            ? '今回はユーザーが詳しい説明を求めているので、詳細に説明してOKなのだ。'
+            : '返答は基本2文以内で短くテンポよく話すのだ。';
+
+          return {
+            parts: [{
+              text: `あなたは「コーヒー豆くん」なのだ。一人称は「コーヒー豆くん」、語尾は「〜なのだ」で話すのだ。
+${lengthRule}
+
+【おすすめを出すときのルール】
+- おすすめを聞かれたら、必ず【豆名】の形式で3つだけ出すのだ。
+- 例: 「【ブラジル】がおすすめなのだ！ほかにも【エチオピア】と【コロンビア】が合いそうなのだ。」
+- 4つ以上は絶対に出さないのだ。
+- 豆名は次のリストから選ぶのだ: ${beanList}
+
+ユーザーが英語で話しかけたら英語で返答するのだ。`
+            }]
+          };
+        }
+
+        // ユーザー入力が「詳しく」を求めているか判定
+        function wantsDetailedAnswer(text) {
+          const detailKeywords = ['詳しく', '詳細', 'もっと詳しく', '教えて詳しく', 'detail', 'more info'];
+          return detailKeywords.some(kw => text.includes(kw));
+        }
+
+        // LLM返答から【豆名】を抽出（既知の豆のみ）
+        function findMentionedBeans(text, knownBeans) {
+          const regex = /【(.+?)】/g;
+          const matches = [];
+          let match;
+          while ((match = regex.exec(text)) !== null) {
+            const beanName = match[1];
+            if (knownBeans.includes(beanName) && !matches.includes(beanName)) {
+              matches.push(beanName);
+            }
+          }
+          return matches;
+        }
+
+        // おすすめ意図があるか判定
+        function hasRecommendIntent(text) {
+          const keywords = ['おすすめ', 'オススメ', 'お勧め', 'recommend', 'suggestion'];
+          return keywords.some(kw => text.toLowerCase().includes(kw.toLowerCase()));
+        }
 
         // デフォルト豆知識
         const DEFAULT_TRIVIA = "コーヒーの木は赤道付近の「コーヒーベルト」と呼ばれる地域で栽培されているのだ！";
@@ -1167,8 +1246,9 @@
           }
         }
 
-        // 初期化: 豆知識を取得
-        fetchTrivia();
+        // 初期化: 豆知識を取得（レート制限対策でデフォルト表示に変更）
+        // fetchTrivia(); // API呼び出しを一時停止
+        triviaText.textContent = DEFAULT_TRIVIA;
 
         // メッセージを追加
         function addMessage(role, text) {
@@ -1180,6 +1260,94 @@
           return messageDiv;
         }
 
+        // CTA付きメッセージを追加（おすすめ確定時）
+        function addMessageWithCTA(text, recommendations) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'chat-message assistant';
+
+          const textDiv = document.createElement('div');
+          textDiv.textContent = text;
+          wrapper.appendChild(textDiv);
+
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'chat-actions';
+
+          const ctaBtn = document.createElement('button');
+          ctaBtn.className = 'chat-action-btn';
+          ctaBtn.textContent = 'おすすめのコーヒー豆をみる';
+          ctaBtn.addEventListener('click', () => {
+            showRecommendations(recommendations);
+          });
+
+          actionsDiv.appendChild(ctaBtn);
+          wrapper.appendChild(actionsDiv);
+          chatMessages.appendChild(wrapper);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+          return wrapper;
+        }
+
+        // おすすめTop3を検索結果セクションに表示
+        function showRecommendations(recommendations) {
+          const beans = extractBeanData();
+
+          // おすすめ順でTop3の豆データを取得
+          const top3Beans = recommendations.slice(0, 3).map(name => {
+            return beans.find(b => b.name === name);
+          }).filter(Boolean);
+
+          if (top3Beans.length === 0) return;
+
+          // チャットモーダルを閉じる
+          closeChatModal();
+
+          // 検索結果セクションを表示
+          searchResultsSection.style.display = 'block';
+          allBeansSection.style.display = 'none';
+
+          // タイトル・説明を更新
+          searchResultsTitle.textContent = '☕ 豆くんおすすめTop3';
+          searchResultsDesc.textContent = 'コーヒー豆くんがあなたにぴったりの豆を選んだのだ！';
+
+          // カードを描画
+          searchResultsGrid.innerHTML = top3Beans.map(bean => createCardHTML(bean)).join('');
+
+          // スムーススクロール
+          searchResultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // カードHTMLを生成
+        function createCardHTML(bean) {
+          return `
+            <article class="card">
+              <div class="card-header">
+                <h3>${bean.name}</h3>
+                <span class="tag">${bean.tag}</span>
+              </div>
+              <p class="desc">${bean.desc}</p>
+              <div class="ratings">
+                <div class="rating">
+                  <span>酸味</span>
+                  <div class="bar" style="--value: ${bean.acidity}"></div>
+                  <span class="score">${bean.acidity}</span>
+                </div>
+                <div class="rating">
+                  <span>味の濃さ</span>
+                  <div class="bar" style="--value: ${bean.body}"></div>
+                  <span class="score">${bean.body}</span>
+                </div>
+                <div class="rating">
+                  <span>焙煎度</span>
+                  <div class="bar" style="--value: ${bean.roast}"></div>
+                  <span class="score">${bean.roast}</span>
+                </div>
+              </div>
+              <ul class="meta">
+                ${bean.meta.map(m => `<li><span class="meta-label">${m.label}</span>${m.value}</li>`).join('')}
+              </ul>
+            </article>
+          `;
+        }
+
         // ローディングメッセージを削除
         function removeLoadingMessage() {
           const loadingMsg = chatMessages.querySelector('.chat-message.loading');
@@ -1189,13 +1357,16 @@
         }
 
         // Gemini APIにリクエスト
-        async function callGeminiAPI() {
+        async function callGeminiAPI(allowLong = false) {
+          const knownBeans = getKnownBeanNames();
+          const systemInstruction = buildSystemInstruction(knownBeans, { allowLong });
+
           const response = await fetch(`${API_ENDPOINT}?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: chatHistory,
-              systemInstruction: SYSTEM_INSTRUCTION
+              systemInstruction: systemInstruction
             })
           });
 
@@ -1234,11 +1405,26 @@
               throw new Error('APIキーが設定されていません');
             }
 
-            const response = await callGeminiAPI();
+            // 「詳しく」を求めているか判定
+            const allowLong = wantsDetailedAnswer(message);
+            const response = await callGeminiAPI(allowLong);
 
-            // ローディングを削除して応答を表示
+            // ローディングを削除
             removeLoadingMessage();
-            addMessage('assistant', response);
+
+            // おすすめ確定判定
+            const knownBeans = getKnownBeanNames();
+            const mentionedBeans = findMentionedBeans(response, knownBeans);
+            const hasIntent = hasRecommendIntent(message) || hasRecommendIntent(response);
+
+            if (mentionedBeans.length >= 3 && hasIntent) {
+              // おすすめ確定: CTA付きで表示
+              lastRecommendations = mentionedBeans.slice(0, 3);
+              addMessageWithCTA(response, lastRecommendations);
+            } else {
+              // 通常の応答
+              addMessage('assistant', response);
+            }
 
             // 履歴に追加
             chatHistory.push({ role: 'model', parts: [{ text: response }] });
