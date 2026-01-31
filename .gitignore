@@ -1,0 +1,22 @@
+.DS_Store
+
+# Secrets / local env
+.env
+**/.env
+
+# Node / JS
+**/node_modules/
+**/.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Remotion
+**/.remotion/
+
+# Build outputs
+**/out/
+**/dist/
+**/build/
+
