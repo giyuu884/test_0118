@@ -11,6 +11,30 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- 動画モーダル -->
+    <div class="video-modal-overlay is-active" id="videoModal">
+      <div class="video-modal">
+        <button class="video-modal-close" id="closeVideoModal" aria-label="閉じる">&times;</button>
+        <video
+          id="introVideo"
+          class="modal-video"
+          autoplay
+          muted
+          playsinline
+        >
+          <source src="coffee-intro.mp4" type="video/mp4" />
+        </video>
+        <div class="video-modal-controls">
+          <button class="video-sound-btn" id="videoSoundBtn">
+            🔇 音声ON
+          </button>
+          <button class="video-skip-btn" id="skipVideoBtn">
+            スキップ →
+          </button>
+        </div>
+      </div>
+    </div>
+
     <header class="site-header">
       <div class="container">
         <p class="eyebrow">Coffee Beans Guide</p>
@@ -759,6 +783,48 @@
 
     <!-- APIキー設定 -->
     <script src="config.js"></script>
+
+    <!-- 動画モーダル制御スクリプト -->
+    <script>
+      (function() {
+        const video = document.getElementById('introVideo');
+        const videoModal = document.getElementById('videoModal');
+        const closeBtn = document.getElementById('closeVideoModal');
+        const skipBtn = document.getElementById('skipVideoBtn');
+        const soundBtn = document.getElementById('videoSoundBtn');
+
+        let isMuted = true;
+
+        // モーダルを閉じる
+        function closeVideoModal() {
+          videoModal.classList.remove('is-active');
+          video.pause();
+          video.muted = true;
+          document.body.style.overflow = '';
+        }
+
+        // 閉じるボタン
+        closeBtn.addEventListener('click', closeVideoModal);
+
+        // スキップボタン
+        skipBtn.addEventListener('click', closeVideoModal);
+
+        // 音声ボタン
+        soundBtn.addEventListener('click', () => {
+          isMuted = !isMuted;
+          video.muted = isMuted;
+          soundBtn.textContent = isMuted ? '🔇 音声ON' : '🔊 音声OFF';
+        });
+
+        // 動画終了時に自動で閉じる
+        video.addEventListener('ended', closeVideoModal);
+
+        // 初期状態でbodyのスクロールを無効化
+        if (videoModal.classList.contains('is-active')) {
+          document.body.style.overflow = 'hidden';
+        }
+      })();
+    </script>
 
     <!-- チャットモーダル -->
     <div class="chat-modal-overlay" id="chatModal">
