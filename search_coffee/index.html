@@ -1263,29 +1263,137 @@
         // デフォルト豆知識
         const DEFAULT_TRIVIA = "コーヒーの木は赤道付近の「コーヒーベルト」と呼ばれる地域で栽培されているのだ！";
 
+        // ===== レート制限（RPM 5 対策）=====
+        // Gemini 2.5 Flash の上限が 5 RPM の場合、1リクエストあたり最低 12 秒は空ける必要がある。
+        // ページ初期化の「豆知識」 + チャット送信が合算で上限を超えないよう、同一ページ内のGemini呼び出しを直列化して間隔を空ける。
+        const GEMINI_RPM_LIMIT = 5;
+        const GEMINI_MIN_INTERVAL_MS = Math.ceil(60_000 / GEMINI_RPM_LIMIT) + 500; // 余裕を足して 12.5s
+        let geminiQueue = Promise.resolve();
+        let nextGeminiAllowedAt = 0;
+
+        function sleep(ms) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // 同一ページ内のGemini呼び出しを「キュー化」して、必ず最小間隔を空ける
+        function scheduleGeminiTask(task) {
+          // 直前のタスクが失敗してもキュー全体が止まらないように握りつぶして継続
+          geminiQueue = geminiQueue.catch(() => {}).then(async () => {
+            const waitMs = Math.max(0, nextGeminiAllowedAt - Date.now());
+            if (waitMs > 0) await sleep(waitMs);
+            nextGeminiAllowedAt = Date.now() + GEMINI_MIN_INTERVAL_MS;
+            return await task();
+          });
+          return geminiQueue;
+        }
+
+        // 429 / 一時的な 5xx のときに指数バックオフして再試行
+        async function postGeminiWithRetry(payload, { maxRetries = 3 } = {}) {
+          let lastError = null;
+
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+              const response = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+
+              if (response.ok) {
+                return await response.json();
+              }
+
+              // 失敗時もできるだけ本文を読んでおく（デバッグ用）
+              let errorBody = null;
+              try {
+                errorBody = await response.json();
+              } catch (_) {
+                // ignore
+              }
+
+              const status = response.status;
+              const err = new Error(`HTTP ${status}`);
+              err.status = status;
+              err.body = errorBody;
+              lastError = err;
+
+              // 429 or 5xx のみリトライ。それ以外は即失敗。
+              const shouldRetry = status === 429 || (status >= 500 && status <= 599);
+              if (!shouldRetry || attempt === maxRetries) {
+                throw err;
+              }
+
+              // Retry-After があれば尊重（秒 or HTTP-date）
+              const retryAfter = response.headers.get('Retry-After');
+              let retryAfterMs = 0;
+              if (retryAfter) {
+                const seconds = Number(retryAfter);
+                if (!Number.isNaN(seconds)) {
+                  retryAfterMs = Math.max(0, seconds * 1000);
+                } else {
+                  const retryDateMs = Date.parse(retryAfter);
+                  if (!Number.isNaN(retryDateMs)) {
+                    retryAfterMs = Math.max(0, retryDateMs - Date.now());
+                  }
+                }
+              }
+
+              // 指数バックオフ + ジッター（ただしRPM超過を避けるため最低でもGEMINI_MIN_INTERVAL_MSは待つ）
+              const base = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s...
+              const jitter = Math.floor(Math.random() * 500); // 0-500ms
+              const backoffMs = Math.max(retryAfterMs, base + jitter, GEMINI_MIN_INTERVAL_MS);
+              await sleep(backoffMs);
+              nextGeminiAllowedAt = Date.now() + GEMINI_MIN_INTERVAL_MS;
+            } catch (e) {
+              lastError = e;
+              // fetch 自体のネットワーク例外は、残り回数があればリトライ
+              if (attempt === maxRetries) throw e;
+              const base = 1000 * Math.pow(2, attempt);
+              const jitter = Math.floor(Math.random() * 500);
+              const backoffMs = Math.max(base + jitter, GEMINI_MIN_INTERVAL_MS);
+              await sleep(backoffMs);
+              nextGeminiAllowedAt = Date.now() + GEMINI_MIN_INTERVAL_MS;
+            }
+          }
+
+          throw lastError || new Error('Gemini request failed');
+        }
+
         // 豆知識を取得
         async function fetchTrivia() {
           try {
-            const response = await fetch('/api/gemini', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{
-                  role: 'user',
-                  parts: [{ text: 'コーヒーに関する豆知識を1つ、50文字以内で「〜なのだ」口調で教えて。' }]
-                }]
-              })
-            });
-
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
+            // 「今日の豆知識」なので、短時間に何度もAPIを叩かない（localStorageにキャッシュ）
+            const TRIVIA_CACHE_KEY = 'coffeeTriviaCache:v1';
+            const TRIVIA_TTL_MS = 12 * 60 * 60 * 1000; // 12時間
+            try {
+              const cached = JSON.parse(localStorage.getItem(TRIVIA_CACHE_KEY) || 'null');
+              if (cached?.text && cached?.fetchedAt && (Date.now() - cached.fetchedAt) < TRIVIA_TTL_MS) {
+                triviaText.textContent = cached.text;
+                return;
+              }
+            } catch (_) {
+              // ignore cache parse errors
             }
 
-            const data = await response.json();
+            const data = await scheduleGeminiTask(() => postGeminiWithRetry({
+              contents: [{
+                role: 'user',
+                parts: [{ text: 'コーヒーに関する豆知識を1つ、50文字以内で「〜なのだ」口調で教えて。' }]
+              }]
+            }, { maxRetries: 2 }));
+
             const triviaResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
             if (triviaResponse) {
               triviaText.textContent = triviaResponse;
+              try {
+                localStorage.setItem(TRIVIA_CACHE_KEY, JSON.stringify({
+                  text: triviaResponse,
+                  fetchedAt: Date.now()
+                }));
+              } catch (_) {
+                // localStorageが使えない環境でも落とさない
+              }
             } else {
               triviaText.textContent = DEFAULT_TRIVIA;
             }
@@ -1470,20 +1578,10 @@
         // --- Gemini API ---
 
         async function callGeminiAPI() {
-          const response = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: chatHistory,
-              systemInstruction: SYSTEM_INSTRUCTION
-            })
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const data = await response.json();
+          const data = await scheduleGeminiTask(() => postGeminiWithRetry({
+            contents: chatHistory,
+            systemInstruction: SYSTEM_INSTRUCTION
+          }, { maxRetries: 3 }));
           return data.candidates?.[0]?.content?.parts?.[0]?.text || 'うまく返事できなかったのだ...';
         }
 

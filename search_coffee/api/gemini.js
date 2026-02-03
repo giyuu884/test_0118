@@ -21,6 +21,11 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
+      // 可能なら Retry-After をクライアントへ伝搬（429の待ち時間ヒント）
+      const retryAfter = response.headers.get('retry-after');
+      if (retryAfter) {
+        res.setHeader('Retry-After', retryAfter);
+      }
       return res.status(response.status).json(data);
     }
 
