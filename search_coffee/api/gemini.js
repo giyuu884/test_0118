@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const body = req.body;
     // モデル未指定の場合はデフォルトを使用
     if (!body.model) {
-      body.model = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free';
+      body.model = process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free';
     }
 
     const response = await fetch(endpoint, {
