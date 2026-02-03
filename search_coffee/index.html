@@ -1204,9 +1204,7 @@
         let lastRecommendation = null;
 
         // システムプロンプト
-        const SYSTEM_INSTRUCTION = {
-          parts: [{
-            text: `あなたは「コーヒー豆くん」です。
+        const SYSTEM_PROMPT = `あなたは「コーヒー豆くん」です。
 
 【キャラクター】
 - 一人称は「コーヒー豆くん」
@@ -1256,39 +1254,36 @@
 イエメン | 中東 | 6 | 7 | 7 | モカ・マタリで有名。赤ワインのような気品
 ジャマイカ | カリブ | 5 | 5 | 5 | ブルーマウンテン。爽やかで非常に上品
 ラオス | アジア | 4 | 6 | 6 | 柔らかい酸味とマイルドさ。キレの良い苦味
-モカ | エチオピア/イエメン | 7 | 6 | 6 | 華やかでワインのような余韻`
-          }]
-        };
+モカ | エチオピア/イエメン | 7 | 6 | 6 | 華やかでワインのような余韻`;
 
         // デフォルト豆知識
         const DEFAULT_TRIVIA = "コーヒーの木は赤道付近の「コーヒーベルト」と呼ばれる地域で栽培されているのだ！";
 
-        // ===== レート制限（RPM 5 対策）=====
-        // Gemini 2.5 Flash の上限が 5 RPM の場合、1リクエストあたり最低 12 秒は空ける必要がある。
-        // ページ初期化の「豆知識」 + チャット送信が合算で上限を超えないよう、同一ページ内のGemini呼び出しを直列化して間隔を空ける。
-        const GEMINI_RPM_LIMIT = 5;
-        const GEMINI_MIN_INTERVAL_MS = Math.ceil(60_000 / GEMINI_RPM_LIMIT) + 500; // 余裕を足して 12.5s
-        let geminiQueue = Promise.resolve();
-        let nextGeminiAllowedAt = 0;
+        // ===== レート制限（RPM対策）=====
+        // OpenRouter経由のAPI呼び出しを直列化して最小間隔を空ける。
+        const API_RPM_LIMIT = 20;
+        const API_MIN_INTERVAL_MS = Math.ceil(60_000 / API_RPM_LIMIT) + 500; // 3.5s
+        let apiQueue = Promise.resolve();
+        let nextAPIAllowedAt = 0;
 
         function sleep(ms) {
           return new Promise(resolve => setTimeout(resolve, ms));
         }
 
-        // 同一ページ内のGemini呼び出しを「キュー化」して、必ず最小間隔を空ける
-        function scheduleGeminiTask(task) {
+        // API呼び出しをキュー化して、必ず最小間隔を空ける
+        function scheduleAPITask(task) {
           // 直前のタスクが失敗してもキュー全体が止まらないように握りつぶして継続
-          geminiQueue = geminiQueue.catch(() => {}).then(async () => {
-            const waitMs = Math.max(0, nextGeminiAllowedAt - Date.now());
+          apiQueue = apiQueue.catch(() => {}).then(async () => {
+            const waitMs = Math.max(0, nextAPIAllowedAt - Date.now());
             if (waitMs > 0) await sleep(waitMs);
-            nextGeminiAllowedAt = Date.now() + GEMINI_MIN_INTERVAL_MS;
+            nextAPIAllowedAt = Date.now() + API_MIN_INTERVAL_MS;
             return await task();
           });
-          return geminiQueue;
+          return apiQueue;
         }
 
         // 429 / 一時的な 5xx のときに指数バックオフして再試行
-        async function postGeminiWithRetry(payload, { maxRetries = 3 } = {}) {
+        async function postAPIWithRetry(payload, { maxRetries = 3 } = {}) {
           let lastError = null;
 
           for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -1338,25 +1333,25 @@
                 }
               }
 
-              // 指数バックオフ + ジッター（ただしRPM超過を避けるため最低でもGEMINI_MIN_INTERVAL_MSは待つ）
+              // 指数バックオフ + ジッター（ただしRPM超過を避けるため最低でもAPI_MIN_INTERVAL_MSは待つ）
               const base = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s...
               const jitter = Math.floor(Math.random() * 500); // 0-500ms
-              const backoffMs = Math.max(retryAfterMs, base + jitter, GEMINI_MIN_INTERVAL_MS);
+              const backoffMs = Math.max(retryAfterMs, base + jitter, API_MIN_INTERVAL_MS);
               await sleep(backoffMs);
-              nextGeminiAllowedAt = Date.now() + GEMINI_MIN_INTERVAL_MS;
+              nextAPIAllowedAt = Date.now() + API_MIN_INTERVAL_MS;
             } catch (e) {
               lastError = e;
               // fetch 自体のネットワーク例外は、残り回数があればリトライ
               if (attempt === maxRetries) throw e;
               const base = 1000 * Math.pow(2, attempt);
               const jitter = Math.floor(Math.random() * 500);
-              const backoffMs = Math.max(base + jitter, GEMINI_MIN_INTERVAL_MS);
+              const backoffMs = Math.max(base + jitter, API_MIN_INTERVAL_MS);
               await sleep(backoffMs);
-              nextGeminiAllowedAt = Date.now() + GEMINI_MIN_INTERVAL_MS;
+              nextAPIAllowedAt = Date.now() + API_MIN_INTERVAL_MS;
             }
           }
 
-          throw lastError || new Error('Gemini request failed');
+          throw lastError || new Error('API request failed');
         }
 
         // 豆知識を取得
@@ -1375,14 +1370,13 @@
               // ignore cache parse errors
             }
 
-            const data = await scheduleGeminiTask(() => postGeminiWithRetry({
-              contents: [{
-                role: 'user',
-                parts: [{ text: 'コーヒーに関する豆知識を1つ、50文字以内で「〜なのだ」口調で教えて。' }]
-              }]
+            const data = await scheduleAPITask(() => postAPIWithRetry({
+              messages: [
+                { role: 'user', content: 'コーヒーに関する豆知識を1つ、50文字以内で「〜なのだ」口調で教えて。' }
+              ]
             }, { maxRetries: 2 }));
 
-            const triviaResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            const triviaResponse = data.choices?.[0]?.message?.content;
 
             if (triviaResponse) {
               triviaText.textContent = triviaResponse;
@@ -1575,14 +1569,16 @@
           openChatModal();
         });
 
-        // --- Gemini API ---
+        // --- Chat API ---
 
-        async function callGeminiAPI() {
-          const data = await scheduleGeminiTask(() => postGeminiWithRetry({
-            contents: chatHistory,
-            systemInstruction: SYSTEM_INSTRUCTION
+        async function callChatAPI() {
+          const data = await scheduleAPITask(() => postAPIWithRetry({
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              ...chatHistory
+            ]
           }, { maxRetries: 3 }));
-          return data.candidates?.[0]?.content?.parts?.[0]?.text || 'うまく返事できなかったのだ...';
+          return data.choices?.[0]?.message?.content || 'うまく返事できなかったのだ...';
         }
 
         // --- メッセージ送信 ---
@@ -1605,14 +1601,14 @@
           chatInput.value = '';
 
           // 履歴に追加
-          chatHistory.push({ role: 'user', parts: [{ text: message }] });
+          chatHistory.push({ role: 'user', content: message });
 
           // ローディング表示
           const loadingMsg = addBubble('assistant', '考え中なのだ...');
           loadingMsg.classList.add('loading');
 
           try {
-            const rawResponse = await callGeminiAPI();
+            const rawResponse = await callChatAPI();
 
             // turnIdチェック（古い返答は無視）
             if (myTurnId !== currentTurnId) return;
@@ -1624,7 +1620,7 @@
             const { conversationText, recommendation } = parseAIResponse(rawResponse);
 
             // 履歴に追加（生テキスト全体を保存）
-            chatHistory.push({ role: 'model', parts: [{ text: rawResponse }] });
+            chatHistory.push({ role: 'assistant', content: rawResponse });
 
             // ふきだし配列に正規化
             const bubbles = normalizeBubbles(conversationText);
