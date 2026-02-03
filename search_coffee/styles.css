@@ -730,6 +730,89 @@ h1 {
   color: var(--muted);
 }
 
+/* チャット内おすすめプレビューカード */
+.chat-recommend-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 4px;
+  max-width: 80%;
+}
+
+.chat-recommend-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.chat-recommend-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.chat-recommend-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.reason-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: #5f4b39;
+  font-weight: 500;
+}
+
+.chat-recommend-cta {
+  display: block;
+  width: 100%;
+  max-width: 80%;
+  margin-top: 8px;
+  padding: 12px;
+  background: linear-gradient(135deg, #c6905f, #9c6a3f);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.chat-recommend-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(181, 124, 77, 0.3);
+}
+
+/* おすすめ一覧セクション */
+.recommend-section {
+  background: #fffaf4;
+  margin: 0 -4%;
+  padding-left: 4%;
+  padding-right: 4%;
+  border-bottom: 1px solid var(--line);
+}
+
+.recommend-section .section-header {
+  text-align: center;
+}
+
+.recommend-section .section-header h2 {
+  color: var(--accent);
+}
+
+/* 理由タグ（一覧カード内） */
+.reason-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 @media (max-width: 640px) {
   .rating {
     grid-template-columns: 70px 1fr 24px;

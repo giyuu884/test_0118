@@ -137,6 +137,16 @@
         <div class="grid" id="searchResultsGrid"></div>
       </section>
 
+      <!-- おすすめ一覧エリア（初期非表示） -->
+      <section class="section recommend-section" id="recommendSection" style="display: none;">
+        <div class="section-header">
+          <h2>コーヒー豆くんのおすすめ</h2>
+          <p id="recommendDesc">あなたの好みに合わせたおすすめ順で表示しています。</p>
+          <button class="btn-reset" id="backToChat">チャットに戻る</button>
+        </div>
+        <div class="grid" id="recommendGrid"></div>
+      </section>
+
       <section class="section" id="allBeansSection">
         <div class="section-header">
           <h2>代表的なコーヒー豆</h2>
@@ -841,6 +851,169 @@
     </div>
 
     <script>
+      // ===== 共有ユーティリティ（検索・チャット両方で使用） =====
+      const allBeansSection = document.getElementById('allBeansSection');
+
+      // 既存カードからデータを抽出
+      function extractBeanData() {
+        const cards = allBeansSection.querySelectorAll('.card');
+        const beans = [];
+
+        cards.forEach((card, index) => {
+          const name = card.querySelector('h3').textContent;
+          const tag = card.querySelector('.tag').textContent;
+          const desc = card.querySelector('.desc').textContent;
+          const ratings = card.querySelectorAll('.rating');
+          const meta = card.querySelectorAll('.meta li');
+
+          const acidity = parseInt(ratings[0].querySelector('.score').textContent);
+          const body = parseInt(ratings[1].querySelector('.score').textContent);
+          const roast = parseInt(ratings[2].querySelector('.score').textContent);
+
+          const metaInfo = [];
+          meta.forEach(li => {
+            metaInfo.push({
+              label: li.querySelector('.meta-label').textContent,
+              value: li.textContent.replace(li.querySelector('.meta-label').textContent, '')
+            });
+          });
+
+          beans.push({
+            index,
+            name,
+            tag,
+            desc,
+            acidity,
+            body,
+            roast,
+            meta: metaInfo,
+            element: card
+          });
+        });
+
+        return beans;
+      }
+
+      // カードHTMLを生成
+      function createCardHTML(bean) {
+        return `
+          <article class="card">
+            <div class="card-header">
+              <h3>${bean.name}</h3>
+              <span class="tag">${bean.tag}</span>
+            </div>
+            <p class="desc">${bean.desc}</p>
+            <div class="ratings">
+              <div class="rating">
+                <span>酸味</span>
+                <div class="bar" style="--value: ${bean.acidity}"></div>
+                <span class="score">${bean.acidity}</span>
+              </div>
+              <div class="rating">
+                <span>味の濃さ</span>
+                <div class="bar" style="--value: ${bean.body}"></div>
+                <span class="score">${bean.body}</span>
+              </div>
+              <div class="rating">
+                <span>焙煎度</span>
+                <div class="bar" style="--value: ${bean.roast}"></div>
+                <span class="score">${bean.roast}</span>
+              </div>
+            </div>
+            <ul class="meta">
+              ${bean.meta.map(m => `<li><span class="meta-label">${m.label}</span>${m.value}</li>`).join('')}
+            </ul>
+          </article>
+        `;
+      }
+
+      // おすすめカードHTMLを生成（理由タグ付き）
+      function createRecommendCardHTML(bean, reasonTags) {
+        return `
+          <article class="card">
+            <div class="card-header">
+              <h3>${bean.name}</h3>
+              <span class="tag">${bean.tag}</span>
+            </div>
+            <div class="reason-tags">
+              ${reasonTags.map(t => `<span class="reason-tag">${t}</span>`).join('')}
+            </div>
+            <p class="desc">${bean.desc}</p>
+            <div class="ratings">
+              <div class="rating">
+                <span>酸味</span>
+                <div class="bar" style="--value: ${bean.acidity}"></div>
+                <span class="score">${bean.acidity}</span>
+              </div>
+              <div class="rating">
+                <span>味の濃さ</span>
+                <div class="bar" style="--value: ${bean.body}"></div>
+                <span class="score">${bean.body}</span>
+              </div>
+              <div class="rating">
+                <span>焙煎度</span>
+                <div class="bar" style="--value: ${bean.roast}"></div>
+                <span class="score">${bean.roast}</span>
+              </div>
+            </div>
+            <ul class="meta">
+              ${bean.meta.map(m => `<li><span class="meta-label">${m.label}</span>${m.value}</li>`).join('')}
+            </ul>
+          </article>
+        `;
+      }
+
+      // 距離計算（共通）
+      function calculateDistance(bean, criteria) {
+        let distance = 0;
+        if (criteria.acidity !== null) {
+          distance += Math.abs(bean.acidity - criteria.acidity);
+        }
+        if (criteria.body !== null) {
+          distance += Math.abs(bean.body - criteria.body);
+        }
+        if (criteria.roast !== null) {
+          distance += Math.abs(bean.roast - criteria.roast);
+        }
+        return distance;
+      }
+
+      // 理由タグ自動生成
+      function generateReasonTags(bean, target) {
+        const tags = [];
+
+        if (target.acidity !== null) {
+          if (Math.abs(bean.acidity - target.acidity) <= 1) tags.push('酸味ぴったり');
+          else if (bean.acidity <= 3) tags.push('酸味ひかえめ');
+          else if (bean.acidity >= 7) tags.push('酸味しっかり');
+        }
+
+        if (target.body !== null) {
+          if (Math.abs(bean.body - target.body) <= 1) tags.push('濃さぴったり');
+          else if (bean.body <= 3) tags.push('あっさり');
+          else if (bean.body >= 7) tags.push('しっかり濃い');
+        }
+
+        if (target.roast !== null) {
+          if (Math.abs(bean.roast - target.roast) <= 1) tags.push('焙煎ぴったり');
+          else if (bean.roast <= 3) tags.push('浅煎り');
+          else if (bean.roast >= 7) tags.push('深煎り');
+        }
+
+        if (tags.filter(t => t.includes('ぴったり')).length === 3) {
+          return ['完全一致！'];
+        }
+
+        const sorted = tags.sort((a, b) => {
+          const aPriority = a.includes('ぴったり') ? 0 : 1;
+          const bPriority = b.includes('ぴったり') ? 0 : 1;
+          return aPriority - bPriority;
+        });
+
+        return sorted.slice(0, 2);
+      }
+
+      // ===== 検索機能 =====
       (function () {
         // 要素の取得
         const openModalBtn = document.getElementById('openSearchModal');
@@ -854,7 +1027,7 @@
         const searchResultsGrid = document.getElementById('searchResultsGrid');
         const searchResultsTitle = document.getElementById('searchResultsTitle');
         const searchResultsDesc = document.getElementById('searchResultsDesc');
-        const allBeansSection = document.getElementById('allBeansSection');
+        const recommendSection = document.getElementById('recommendSection');
 
         // 選択状態
         const selectedCriteria = {
@@ -863,101 +1036,8 @@
           roast: null
         };
 
-        // 既存カードからデータを抽出
-        function extractBeanData() {
-          const cards = allBeansSection.querySelectorAll('.card');
-          const beans = [];
-
-          cards.forEach((card, index) => {
-            const name = card.querySelector('h3').textContent;
-            const tag = card.querySelector('.tag').textContent;
-            const desc = card.querySelector('.desc').textContent;
-            const ratings = card.querySelectorAll('.rating');
-            const meta = card.querySelectorAll('.meta li');
-
-            const acidity = parseInt(ratings[0].querySelector('.score').textContent);
-            const body = parseInt(ratings[1].querySelector('.score').textContent);
-            const roast = parseInt(ratings[2].querySelector('.score').textContent);
-
-            const metaInfo = [];
-            meta.forEach(li => {
-              metaInfo.push({
-                label: li.querySelector('.meta-label').textContent,
-                value: li.textContent.replace(li.querySelector('.meta-label').textContent, '')
-              });
-            });
-
-            beans.push({
-              index,
-              name,
-              tag,
-              desc,
-              acidity,
-              body,
-              roast,
-              meta: metaInfo,
-              element: card
-            });
-          });
-
-          return beans;
-        }
-
-        // カードHTMLを生成
-        function createCardHTML(bean) {
-          return `
-            <article class="card">
-              <div class="card-header">
-                <h3>${bean.name}</h3>
-                <span class="tag">${bean.tag}</span>
-              </div>
-              <p class="desc">${bean.desc}</p>
-              <div class="ratings">
-                <div class="rating">
-                  <span>酸味</span>
-                  <div class="bar" style="--value: ${bean.acidity}"></div>
-                  <span class="score">${bean.acidity}</span>
-                </div>
-                <div class="rating">
-                  <span>味の濃さ</span>
-                  <div class="bar" style="--value: ${bean.body}"></div>
-                  <span class="score">${bean.body}</span>
-                </div>
-                <div class="rating">
-                  <span>焙煎度</span>
-                  <div class="bar" style="--value: ${bean.roast}"></div>
-                  <span class="score">${bean.roast}</span>
-                </div>
-              </div>
-              <ul class="meta">
-                ${bean.meta.map(m => `<li><span class="meta-label">${m.label}</span>${m.value}</li>`).join('')}
-              </ul>
-            </article>
-          `;
-        }
-
-        // 距離計算
-        function calculateDistance(bean, criteria) {
-          let distance = 0;
-          if (criteria.acidity !== null) {
-            distance += Math.abs(bean.acidity - criteria.acidity);
-          }
-          if (criteria.body !== null) {
-            distance += Math.abs(bean.body - criteria.body);
-          }
-          if (criteria.roast !== null) {
-            distance += Math.abs(bean.roast - criteria.roast);
-          }
-          return distance;
-        }
-
-        // 完全一致チェック
-        function isExactMatch(bean, criteria) {
-          if (criteria.acidity !== null && bean.acidity !== criteria.acidity) return false;
-          if (criteria.body !== null && bean.body !== criteria.body) return false;
-          if (criteria.roast !== null && bean.roast !== criteria.roast) return false;
-          return true;
-        }
+        // 距離計算（検索用ラッパー - 共通関数を使用）
+        // calculateDistance は共有スコープの関数を使用
 
         // 検索実行
         function performSearch() {
@@ -1009,6 +1089,7 @@
           closeModal();
           searchResultsSection.style.display = 'block';
           allBeansSection.style.display = 'none';
+          recommendSection.style.display = 'none';
 
           // 検索結果にスクロール
           searchResultsSection.scrollIntoView({ behavior: 'smooth' });
@@ -1040,6 +1121,7 @@
         // 検索結果をリセット
         function resetSearch() {
           searchResultsSection.style.display = 'none';
+          recommendSection.style.display = 'none';
           allBeansSection.style.display = 'block';
           resetSelection();
         }
@@ -1098,7 +1180,7 @@
         resetSearchBtn.addEventListener('click', resetSearch);
       })();
 
-      // コーヒー豆くんチャット機能
+      // ===== コーヒー豆くんチャット機能 =====
       (function () {
         // 要素の取得
         const openChatBtn = document.getElementById('openChatModal');
@@ -1108,16 +1190,73 @@
         const chatInput = document.getElementById('chatInput');
         const chatSendBtn = document.getElementById('chatSendBtn');
         const triviaText = document.getElementById('triviaText');
+        const recommendSection = document.getElementById('recommendSection');
+        const recommendGrid = document.getElementById('recommendGrid');
+        const recommendDesc = document.getElementById('recommendDesc');
+        const backToChatBtn = document.getElementById('backToChat');
+        const searchResultsSection = document.getElementById('searchResultsSection');
 
         // 状態管理
         let isChatOpen = false;
         let chatHistory = [];
         let isSending = false;
+        let currentTurnId = 0;
+        let lastRecommendation = null;
 
         // システムプロンプト
         const SYSTEM_INSTRUCTION = {
           parts: [{
-            text: "あなたは「コーヒー豆くん」です。一人称は「コーヒー豆くん」、語尾は「〜なのだ」で話してください。コーヒーに関する質問に答えたり、おすすめの豆を紹介してください。ユーザーが英語で話しかけたら英語で返答してください。"
+            text: `あなたは「コーヒー豆くん」です。
+
+【キャラクター】
+- 一人称は「コーヒー豆くん」
+- 語尾は「〜なのだ」で話す
+- ユーザーが英語で話しかけたら英語で返答する
+
+【出力フォーマット（厳守）】
+- 1行につき1文。文末ごとに改行する
+- 箇条書き（- * ・）、見出し（#）、長文段落は絶対に使わない
+- 原則4行以内（ユーザーが詳しい解説を求めた場合のみ例外的に増加可）
+
+【おすすめ提示時のフォーマット】
+- 具体的な豆名を1つでも提示するときは、会話テキストの後に以下を付ける:
+  ---JSON---
+  {"acidity":数値またはnull,"body":数値またはnull,"roast":数値またはnull,"topBean":"豆名"}
+- acidity=酸味、body=味の濃さ、roast=焙煎度（各1〜10、推定できない場合はnull）
+- topBeanはサイト内の豆名と完全一致させる
+- 雑談・豆知識・質問返しのみの場合は ---JSON--- を付けない
+
+【好み推定のルール】
+- ユーザーの発話から酸味・濃さ・焙煎の好みを推定する
+- 推定できない軸が残る場合、最も判別に効く軸を1つだけ「2択や選択肢」で質問する
+- 質問返しのターンでは ---JSON--- を付けない
+
+【データ制約】
+- おすすめはサイト内の豆データのみで構成する
+- ユーザーが明示的に「サイト外も含めて」等を要求した場合のみ、サイト外の豆を提案してよい（その場合「サイト外の提案」と明記する）
+
+【サイト内の豆データ（20種）】
+名前 | 地域 | 酸味 | 濃さ | 焙煎 | 特徴
+ブラジル | 南米 | 3 | 6 | 6 | ナッツの雰囲気で飲みやすいバランス型
+コロンビア | 南米 | 5 | 6 | 6 | カシスや赤ワインのような豊潤さ。万能
+グアテマラ | 中米 | 5 | 6 | 5 | ピスタチオのようなナッツ感とクリーンさ
+エチオピア | アフリカ | 8 | 4 | 5 | 紅茶のように華やか。フローラルな香り
+ケニア | アフリカ | 9 | 7 | 5 | 弾ける酸味とジューシーさ
+タンザニア | アフリカ | 6 | 6 | 6 | キレのある酸味。深煎りでも後味が軽い
+インドネシア | アジア | 3 | 8 | 8 | アーシーで個性的。深煎りで濃厚なコク
+コスタリカ | 中米 | 6 | 6 | 5 | 甘さと酸味のバランス。赤ワイン系
+ニカラグア | 中米 | 6 | 5 | 4 | グレープフルーツ系の明るい酸味。クリーン
+中国 | アジア | 6 | 6 | 5 | 多様な精製で個性が急増中。フルーツ感
+ベトナム | アジア | 3 | 7 | 7 | ロブスタのパンチ。ファインロブスタも
+ホンジュラス | 中米 | 4 | 6 | 5 | ハーブやナッツの印象。優しい飲み口
+ペルー | 南米 | 4 | 5 | 5 | マイルドでナッツ感。飲みやすいバランス型
+エルサルバドル | 中米 | 6 | 5 | 5 | 蜂蜜のような柔らかい甘さ。パカマラ種
+ルワンダ | アフリカ | 7 | 5 | 4 | みかんのような明るい酸味。ジューシー
+ブルンジ | アフリカ | 6 | 5 | 5 | 明るい酸味と甘さのバランス。上品
+イエメン | 中東 | 6 | 7 | 7 | モカ・マタリで有名。赤ワインのような気品
+ジャマイカ | カリブ | 5 | 5 | 5 | ブルーマウンテン。爽やかで非常に上品
+ラオス | アジア | 4 | 6 | 6 | 柔らかい酸味とマイルドさ。キレの良い苦味
+モカ | エチオピア/イエメン | 7 | 6 | 6 | 華やかでワインのような余韻`
           }]
         };
 
@@ -1159,8 +1298,56 @@
         // 初期化: 豆知識を取得
         fetchTrivia();
 
-        // メッセージを追加
-        function addMessage(role, text) {
+        // --- AIレスポンスのパース ---
+
+        // セパレータでテキストとJSONを分離
+        function parseAIResponse(rawText) {
+          const separator = '---JSON---';
+          const parts = rawText.split(separator);
+          const conversationText = parts[0];
+          let recommendation = null;
+
+          if (parts.length > 1) {
+            try {
+              recommendation = JSON.parse(parts[1].trim());
+            } catch (e) {
+              console.error('JSON パース失敗:', e);
+            }
+          }
+
+          return { conversationText, recommendation };
+        }
+
+        // 会話テキストをふきだし配列に正規化
+        function normalizeBubbles(text) {
+          // 改行コード統一 → trim
+          let normalized = text.replace(/\r\n/g, '\n').trim();
+
+          // 改行でsplit → 空行除去
+          let lines = normalized.split('\n').filter(line => line.trim() !== '');
+
+          // 1行しか取れない場合、文末記号で保険分割
+          if (lines.length === 1 && lines[0].length > 30) {
+            const fallback = lines[0].split(/(?<=[。！？])/).filter(s => s.trim() !== '');
+            if (fallback.length > 1) {
+              lines = fallback;
+            }
+          }
+
+          // 最大4行に丸める（超過分は末尾行に結合）
+          if (lines.length > 4) {
+            const first3 = lines.slice(0, 3);
+            const rest = lines.slice(3).join('');
+            lines = [...first3, rest];
+          }
+
+          return lines.map(line => line.trim()).filter(line => line !== '');
+        }
+
+        // --- メッセージ表示 ---
+
+        // 単一のふきだしを追加
+        function addBubble(role, text) {
           const messageDiv = document.createElement('div');
           messageDiv.className = `chat-message ${role}`;
           messageDiv.textContent = text;
@@ -1177,7 +1364,111 @@
           }
         }
 
-        // Gemini APIにリクエスト
+        // ふきだしを300ms間隔で連投表示
+        function displayBubblesSequentially(bubbles, turnId) {
+          return new Promise((resolve) => {
+            let i = 0;
+            function showNext() {
+              if (turnId !== currentTurnId) { resolve(); return; }
+              if (i >= bubbles.length) { resolve(); return; }
+              addBubble('assistant', bubbles[i]);
+              i++;
+              setTimeout(showNext, 300);
+            }
+            showNext();
+          });
+        }
+
+        // --- おすすめ処理 ---
+
+        // プレビューカードをチャット内に追加
+        function addPreviewCard(topBeanData, target) {
+          const reasonTags = generateReasonTags(topBeanData, target);
+
+          const cardDiv = document.createElement('div');
+          cardDiv.className = 'chat-recommend-card';
+          cardDiv.innerHTML = `
+            <div class="chat-recommend-header">
+              <span class="chat-recommend-name">${topBeanData.name}</span>
+              <span class="tag">${topBeanData.tag}</span>
+            </div>
+            <div class="chat-recommend-tags">
+              ${reasonTags.map(t => `<span class="reason-tag">${t}</span>`).join('')}
+            </div>
+          `;
+          chatMessages.appendChild(cardDiv);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // CTAボタンをチャット内に追加
+        function addCTAButton() {
+          const ctaBtn = document.createElement('button');
+          ctaBtn.className = 'chat-recommend-cta';
+          ctaBtn.textContent = 'おすすめのコーヒー豆を見る';
+          ctaBtn.addEventListener('click', showRecommendSection);
+          chatMessages.appendChild(ctaBtn);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // おすすめデータを計算・保存
+        function processRecommendation(rec) {
+          const target = {
+            acidity: rec.acidity ?? null,
+            body: rec.body ?? null,
+            roast: rec.roast ?? null
+          };
+
+          const beans = extractBeanData();
+          const beansWithDistance = beans.map(bean => ({
+            ...bean,
+            distance: calculateDistance(bean, target)
+          }));
+
+          beansWithDistance.sort((a, b) => {
+            if (a.distance !== b.distance) return a.distance - b.distance;
+            return a.index - b.index;
+          });
+
+          const topBeanData = beans.find(b => b.name === rec.topBean) || null;
+
+          lastRecommendation = {
+            target,
+            topBean: rec.topBean,
+            sortedBeans: beansWithDistance
+          };
+
+          return { target, topBeanData, sortedBeans: beansWithDistance };
+        }
+
+        // おすすめ一覧セクションを表示
+        function showRecommendSection() {
+          if (!lastRecommendation) return;
+
+          const { target, sortedBeans } = lastRecommendation;
+
+          // カードを描画
+          recommendGrid.innerHTML = sortedBeans.map(bean => {
+            const tags = generateReasonTags(bean, target);
+            return createRecommendCardHTML(bean, tags);
+          }).join('');
+
+          // セクション切り替え
+          closeChatModal();
+          allBeansSection.style.display = 'none';
+          searchResultsSection.style.display = 'none';
+          recommendSection.style.display = 'block';
+          recommendSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 「チャットに戻る」ボタン
+        backToChatBtn.addEventListener('click', () => {
+          recommendSection.style.display = 'none';
+          allBeansSection.style.display = 'block';
+          openChatModal();
+        });
+
+        // --- Gemini API ---
+
         async function callGeminiAPI() {
           const response = await fetch('/api/gemini', {
             method: 'POST',
@@ -1196,7 +1487,8 @@
           return data.candidates?.[0]?.content?.parts?.[0]?.text || 'うまく返事できなかったのだ...';
         }
 
-        // メッセージ送信
+        // --- メッセージ送信 ---
+
         async function sendMessage() {
           const message = chatInput.value.trim();
           if (!message || isSending) return;
@@ -1206,31 +1498,62 @@
           chatSendBtn.disabled = true;
           chatInput.disabled = true;
 
+          // turnId発行
+          currentTurnId++;
+          const myTurnId = currentTurnId;
+
           // ユーザーメッセージを表示
-          addMessage('user', message);
+          addBubble('user', message);
           chatInput.value = '';
 
           // 履歴に追加
           chatHistory.push({ role: 'user', parts: [{ text: message }] });
 
           // ローディング表示
-          const loadingMsg = addMessage('assistant', '考え中なのだ...');
+          const loadingMsg = addBubble('assistant', '考え中なのだ...');
           loadingMsg.classList.add('loading');
 
           try {
-            const response = await callGeminiAPI();
+            const rawResponse = await callGeminiAPI();
 
-            // ローディングを削除して応答を表示
+            // turnIdチェック（古い返答は無視）
+            if (myTurnId !== currentTurnId) return;
+
+            // ローディングを削除
             removeLoadingMessage();
-            addMessage('assistant', response);
 
-            // 履歴に追加
-            chatHistory.push({ role: 'model', parts: [{ text: response }] });
+            // レスポンスをパース
+            const { conversationText, recommendation } = parseAIResponse(rawResponse);
+
+            // 履歴に追加（生テキスト全体を保存）
+            chatHistory.push({ role: 'model', parts: [{ text: rawResponse }] });
+
+            // ふきだし配列に正規化
+            const bubbles = normalizeBubbles(conversationText);
+
+            // 連投表示（300ms間隔）
+            await displayBubblesSequentially(bubbles, myTurnId);
+
+            // turnIdチェック
+            if (myTurnId !== currentTurnId) return;
+
+            // おすすめ処理（JSONがある場合）
+            if (recommendation && recommendation.topBean) {
+              const { target, topBeanData } = processRecommendation(recommendation);
+
+              // プレビューカード（topBeanがサイト内に見つかる場合のみ）
+              if (topBeanData) {
+                addPreviewCard(topBeanData, target);
+              }
+
+              // CTAボタン（常に表示）
+              addCTAButton();
+            }
           } catch (error) {
             console.error('API呼び出しエラー:', error);
+            if (myTurnId !== currentTurnId) return;
             removeLoadingMessage();
-
-            addMessage('assistant', 'うまく返事できなかったのだ...もう一度試してほしいのだ。');
+            addBubble('assistant', 'うまく返事できなかったのだ...もう一度試してほしいのだ。');
           } finally {
             // 送信状態をリセット
             isSending = false;
@@ -1240,7 +1563,8 @@
           }
         }
 
-        // チャットモーダルを開く
+        // --- モーダル制御 ---
+
         function openChatModal() {
           chatModal.classList.add('is-active');
           document.body.style.overflow = 'hidden';
@@ -1248,7 +1572,6 @@
           chatInput.focus();
         }
 
-        // チャットモーダルを閉じる
         function closeChatModal() {
           chatModal.classList.remove('is-active');
           document.body.style.overflow = '';
@@ -1259,24 +1582,20 @@
         openChatBtn.addEventListener('click', openChatModal);
         closeChatBtn.addEventListener('click', closeChatModal);
 
-        // オーバーレイクリックで閉じる
         chatModal.addEventListener('click', (e) => {
           if (e.target === chatModal) {
             closeChatModal();
           }
         });
 
-        // ESCキーで閉じる
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape' && isChatOpen) {
             closeChatModal();
           }
         });
 
-        // 送信ボタン
         chatSendBtn.addEventListener('click', sendMessage);
 
-        // Enterキーで送信
         chatInput.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
