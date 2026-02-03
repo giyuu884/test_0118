@@ -781,9 +781,6 @@
       </div>
     </footer>
 
-    <!-- APIキー設定 -->
-    <script src="config.js"></script>
-
     <!-- 動画モーダル制御スクリプト -->
     <script>
       (function() {
@@ -1117,9 +1114,6 @@
         let chatHistory = [];
         let isSending = false;
 
-        // APIエンドポイント
-        const API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-
         // システムプロンプト
         const SYSTEM_INSTRUCTION = {
           parts: [{
@@ -1132,13 +1126,8 @@
 
         // 豆知識を取得
         async function fetchTrivia() {
-          if (typeof GEMINI_API_KEY === 'undefined' || GEMINI_API_KEY === 'YOUR_API_KEY_HERE') {
-            triviaText.textContent = DEFAULT_TRIVIA;
-            return;
-          }
-
           try {
-            const response = await fetch(`${API_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+            const response = await fetch('/api/gemini', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1190,7 +1179,7 @@
 
         // Gemini APIにリクエスト
         async function callGeminiAPI() {
-          const response = await fetch(`${API_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+          const response = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1229,11 +1218,6 @@
           loadingMsg.classList.add('loading');
 
           try {
-            // APIキーが未設定の場合はエラーメッセージ
-            if (typeof GEMINI_API_KEY === 'undefined' || GEMINI_API_KEY === 'YOUR_API_KEY_HERE') {
-              throw new Error('APIキーが設定されていません');
-            }
-
             const response = await callGeminiAPI();
 
             // ローディングを削除して応答を表示
@@ -1246,11 +1230,7 @@
             console.error('API呼び出しエラー:', error);
             removeLoadingMessage();
 
-            let errorMessage = 'うまく返事できなかったのだ...もう一度試してほしいのだ。';
-            if (error.message === 'APIキーが設定されていません') {
-              errorMessage = 'APIキーが設定されていないのだ。config.jsにAPIキーを設定してほしいのだ！';
-            }
-            addMessage('assistant', errorMessage);
+            addMessage('assistant', 'うまく返事できなかったのだ...もう一度試してほしいのだ。');
           } finally {
             // 送信状態をリセット
             isSending = false;
